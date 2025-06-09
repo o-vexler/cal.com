@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Controller, useFormContext } from "react-hook-form";
 import type { UseFormGetValues, UseFormSetValue, Control, FormState } from "react-hook-form";
 import type { MultiValue } from "react-select";
+import { Sparkles } from "lucide-react";
 
 import { useIsPlatform } from "@calcom/atoms/hooks/useIsPlatform";
 import useLockedFieldsManager from "@calcom/features/ee/managed-event-types/hooks/useLockedFieldsManager";
@@ -18,7 +19,9 @@ import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { md } from "@calcom/lib/markdownIt";
 import { slugify } from "@calcom/lib/slugify";
 import turndown from "@calcom/lib/turndownService";
+import { trpc } from "@calcom/trpc/react";
 import classNames from "@calcom/ui/classNames";
+import { Button } from "@calcom/ui/components/button";
 import { Editor } from "@calcom/ui/components/editor";
 import { TextAreaField } from "@calcom/ui/components/form";
 import { Label } from "@calcom/ui/components/form";
@@ -26,6 +29,7 @@ import { TextField } from "@calcom/ui/components/form";
 import { Select } from "@calcom/ui/components/form";
 import { SettingsToggle } from "@calcom/ui/components/form";
 import { Skeleton } from "@calcom/ui/components/skeleton";
+import { showToast } from "@calcom/ui/components/toast";
 
 export type EventSetupTabCustomClassNames = {
   wrapper?: string;
@@ -79,9 +83,34 @@ export const EventSetupTab = (
     formMethods.getValues("metadata")?.multipleDuration
   );
   const [firstRender, setFirstRender] = useState(true);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
   const seatsEnabled = formMethods.watch("seatsPerTimeSlotEnabled");
   const autoTranslateDescriptionEnabled = formMethods.watch("autoTranslateDescriptionEnabled");
+
+  const generateEventTypeSuggestion = trpc.viewer.ai.generateEventTypeSuggestion.useMutation({
+    onSuccess: (data) => {
+      formMethods.setValue("title", data.title);
+      formMethods.setValue("slug", data.slug);
+      showToast("AI suggestion generated successfully", "success");
+    },
+    onError: (error) => {
+      showToast(error.message || "Failed to generate AI suggestion", "error");
+    },
+    onSettled: () => {
+      setIsGeneratingTitle(false);
+    },
+  });
+
+  const handleGenerateAISuggestion = () => {
+    const description = formMethods.getValues("description");
+    if (!description || description.trim().length === 0) {
+      showToast("Please enter a description first", "warning");
+      return;
+    }
+    setIsGeneratingTitle(true);
+    generateEventTypeSuggestion.mutate({ description });
+  };
 
   const multipleDurationOptions = [
     5, 10, 15, 20, 25, 30, 45, 50, 60, 75, 80, 90, 120, 150, 180, 240, 300, 360, 420, 480,
@@ -127,7 +156,7 @@ export const EventSetupTab = (
             data-testid="event-title"
             {...formMethods.register("title")}
           />
-          <div>
+          <div className="space-y-2">
             {isPlatform ? (
               <TextAreaField
                 {...formMethods.register("description", {
@@ -158,6 +187,17 @@ export const EventSetupTab = (
                 />
               </>
             )}
+            <Button
+              type="button"
+              onClick={handleGenerateAISuggestion}
+              disabled={isGeneratingTitle || descriptionLockedProps.disabled}
+              loading={isGeneratingTitle}
+              variant="secondary"
+              size="sm"
+              className="w-full sm:w-auto">
+              <Sparkles className="mr-2 h-4 w-4" />
+              {isGeneratingTitle ? "Generating..." : "Generate Title & URL with AI"}
+            </Button>
           </div>
           {!isPlatform && (
             <div className="[&_label]:my-1 [&_label]:font-normal">

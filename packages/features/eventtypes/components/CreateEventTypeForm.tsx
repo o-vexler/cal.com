@@ -8,11 +8,15 @@ import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { md } from "@calcom/lib/markdownIt";
 import slugify from "@calcom/lib/slugify";
 import turndown from "@calcom/lib/turndownService";
+import { trpc } from "@calcom/trpc/react";
+import { Button } from "@calcom/ui/components/button";
 import { Editor } from "@calcom/ui/components/editor";
 import { Form } from "@calcom/ui/components/form";
 import { TextAreaField } from "@calcom/ui/components/form";
 import { TextField } from "@calcom/ui/components/form";
 import { Tooltip } from "@calcom/ui/components/tooltip";
+import { Sparkles } from "lucide-react";
+import { showToast } from "@calcom/ui/components/toast";
 
 export default function CreateEventTypeForm({
   form,
@@ -34,8 +38,32 @@ export default function CreateEventTypeForm({
   const isPlatform = useIsPlatform();
   const { t } = useLocale();
   const [firstRender, setFirstRender] = useState(true);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
 
   const { register } = form;
+  const generateEventTypeSuggestion = trpc.viewer.ai.generateEventTypeSuggestion.useMutation({
+    onSuccess: (data) => {
+      form.setValue("title", data.title);
+      form.setValue("slug", data.slug);
+      showToast("AI suggestion generated successfully", "success");
+    },
+    onError: (error) => {
+      showToast(error.message || "Failed to generate AI suggestion", "error");
+    },
+    onSettled: () => {
+      setIsGeneratingTitle(false);
+    },
+  });
+
+  const handleGenerateAISuggestion = () => {
+    const description = form.getValues("description");
+    if (!description || description.trim().length === 0) {
+      showToast("Please enter a description first", "warning");
+      return;
+    }
+    setIsGeneratingTitle(true);
+    generateEventTypeSuggestion.mutate({ description });
+  };
   return (
     <Form
       form={form}
@@ -106,19 +134,32 @@ export default function CreateEventTypeForm({
           </div>
         )}
         <>
-          {isPlatform ? (
-            <TextAreaField {...register("description")} placeholder={t("quick_video_meeting")} />
-          ) : (
-            <Editor
-              getText={() => md.render(form.getValues("description") || "")}
-              setText={(value: string) => form.setValue("description", turndown(value))}
-              excludedToolbarItems={["blockType", "link"]}
-              placeholder={t("quick_video_meeting")}
-              firstRender={firstRender}
-              setFirstRender={setFirstRender}
-              maxHeight="200px"
-            />
-          )}
+          <div className="space-y-2">
+            {isPlatform ? (
+              <TextAreaField {...register("description")} placeholder={t("quick_video_meeting")} />
+            ) : (
+              <Editor
+                getText={() => md.render(form.getValues("description") || "")}
+                setText={(value: string) => form.setValue("description", turndown(value))}
+                excludedToolbarItems={["blockType", "link"]}
+                placeholder={t("quick_video_meeting")}
+                firstRender={firstRender}
+                setFirstRender={setFirstRender}
+                maxHeight="200px"
+              />
+            )}
+            <Button
+              type="button"
+              onClick={handleGenerateAISuggestion}
+              disabled={isGeneratingTitle}
+              loading={isGeneratingTitle}
+              variant="secondary"
+              size="sm"
+              className="w-full sm:w-auto">
+              <Sparkles className="mr-2 h-4 w-4" />
+              {isGeneratingTitle ? "Generating..." : "Generate Title & URL with AI"}
+            </Button>
+          </div>
 
           <div className="relative">
             <TextField

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import dayjs from "@calcom/dayjs";
@@ -19,6 +19,7 @@ import { Label } from "@calcom/ui/components/form";
 import { Select } from "@calcom/ui/components/form";
 import { Switch } from "@calcom/ui/components/form";
 import { showToast } from "@calcom/ui/components/toast";
+import { Sparkles } from "lucide-react";
 
 import { OutOfOfficeTab } from "./OutOfOfficeToggleGroup";
 
@@ -131,6 +132,7 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
   }));
 
   const [profileRedirect, setProfileRedirect] = useState(!!currentlyEditingOutOfOfficeEntry?.toTeamUserId);
+  const [hasAISelectedReason, setHasAISelectedReason] = useState(false);
 
   const { hasTeamPlan } = useHasTeamPlan();
 
@@ -160,6 +162,31 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
 
   const watchedTeamUserId = watch("toTeamUserId");
   const watchForUserId = watch("forUserId");
+  const watchedNotes = watch("notes");
+
+  const classifyOOOReason = trpc.viewer.ai.classifyOOOReason.useMutation({
+    onSuccess: (data) => {
+      // Map reason string to reason ID
+      const reasonMap: Record<string, number> = {
+        "vacation": 1,
+        "sick-leave": 2,
+        "travel": 3,
+        "personal": 4,
+        "other": 5,
+      };
+      const reasonId = reasonMap[data.reason] || 5;
+      setValue("reasonId", reasonId);
+      setHasAISelectedReason(true);
+    },
+  });
+
+  const debouncedNotes = useDebounce(watchedNotes, 1000);
+
+  useEffect(() => {
+    if (debouncedNotes && debouncedNotes.trim().length > 10 && !currentlyEditingOutOfOfficeEntry) {
+      classifyOOOReason.mutate({ notes: debouncedNotes });
+    }
+  }, [debouncedNotes]);
 
   const createOrEditOutOfOfficeEntry = trpc.viewer.ooo.outOfOfficeCreateOrUpdate.useMutation({
     onSuccess: () => {
@@ -311,7 +338,15 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
             {/* Reason Select */}
             <div className="mt-4 w-full">
               <div className="">
-                <p className="text-emphasis block text-sm font-medium">{t("reason")}</p>
+                <p className="text-emphasis block text-sm font-medium">
+                  {t("reason")}
+                  {hasAISelectedReason && (
+                    <span className="ml-2 inline-flex items-center text-xs text-muted-foreground">
+                      <Sparkles className="mr-1 h-3 w-3" />
+                      AI selected
+                    </span>
+                  )}
+                </p>
                 <Controller
                   control={control}
                   name="reasonId"
@@ -326,6 +361,7 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
                       onChange={(selectedOption) => {
                         if (selectedOption?.value) {
                           onChange(selectedOption.value);
+                          setHasAISelectedReason(false); // User manually changed it
                         }
                       }}
                     />
