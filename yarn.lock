@@ -111,6 +111,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@anthropic-ai/sdk@npm:^0.53.0":
+  version: 0.53.0
+  resolution: "@anthropic-ai/sdk@npm:0.53.0"
+  bin:
+    anthropic-ai-sdk: bin/cli
+  checksum: 0006d30374378a21259325980223583216a4f378512db75055bf865795c7e4ab573df5a46fa9c9462b3c0a75a593d4e1b9bf2bc5a035a2aaadadb01c40fa8cf7
+  languageName: node
+  linkType: hard
+
 "@apidevtools/json-schema-ref-parser@npm:9.0.9":
   version: 9.0.9
   resolution: "@apidevtools/json-schema-ref-parser@npm:9.0.9"
@@ -21823,6 +21832,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "calcom-monorepo@workspace:."
   dependencies:
+    "@anthropic-ai/sdk": ^0.53.0
     "@changesets/changelog-github": ^0.5.1
     "@changesets/cli": 2.29.4
     "@daily-co/daily-js": ^0.76.0

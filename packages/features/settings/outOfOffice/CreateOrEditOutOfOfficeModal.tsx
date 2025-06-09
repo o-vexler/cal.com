@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import dayjs from "@calcom/dayjs";
 import { Dialog } from "@calcom/features/components/controlled-dialog";
+import { selectOOOReasonFromNotes } from "@calcom/lib/ai/claude";
 import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
 import { useDebounce } from "@calcom/lib/hooks/useDebounce";
 import { useHasTeamPlan } from "@calcom/lib/hooks/useHasPaidPlan";
@@ -131,6 +132,7 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
   }));
 
   const [profileRedirect, setProfileRedirect] = useState(!!currentlyEditingOutOfOfficeEntry?.toTeamUserId);
+  const [isAnalyzingNotes, setIsAnalyzingNotes] = useState(false);
 
   const { hasTeamPlan } = useHasTeamPlan();
 
@@ -160,6 +162,32 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
 
   const watchedTeamUserId = watch("toTeamUserId");
   const watchForUserId = watch("forUserId");
+  const notes = watch("notes");
+  const debouncedNotes = useDebounce(notes, 1000);
+
+  const analyzeNotesWithAI = useCallback(async () => {
+    if (!debouncedNotes?.trim() || isAnalyzingNotes) return;
+    
+    setIsAnalyzingNotes(true);
+    try {
+      const aiResponse = await selectOOOReasonFromNotes(debouncedNotes);
+      
+      if (aiResponse.confidence > 70) {
+        setValue("reasonId", aiResponse.reasonId);
+        showToast(t("ai_reason_selected"), "success");
+      }
+    } catch (error) {
+      console.error("AI analysis failed:", error);
+    } finally {
+      setIsAnalyzingNotes(false);
+    }
+  }, [debouncedNotes, setValue, isAnalyzingNotes, t]);
+
+  useEffect(() => {
+    if (debouncedNotes?.trim()) {
+      analyzeNotesWithAI();
+    }
+  }, [debouncedNotes, analyzeNotesWithAI]);
 
   const createOrEditOutOfOfficeEntry = trpc.viewer.ooo.outOfOfficeCreateOrUpdate.useMutation({
     onSuccess: () => {
@@ -316,19 +344,24 @@ export const CreateOrEditOutOfOfficeEntryModal = ({
                   control={control}
                   name="reasonId"
                   render={({ field: { onChange, value } }) => (
-                    <Select<Option>
-                      className="mb-0 mt-1 text-white"
-                      name="reason"
-                      data-testid="reason_select"
-                      value={reasonList.find((reason) => reason.value === value)}
-                      placeholder={t("ooo_select_reason")}
-                      options={reasonList}
-                      onChange={(selectedOption) => {
-                        if (selectedOption?.value) {
-                          onChange(selectedOption.value);
-                        }
-                      }}
-                    />
+                    <div className="space-y-2">
+                      <Select<Option>
+                        className="mb-0 mt-1 text-white"
+                        name="reason"
+                        data-testid="reason_select"
+                        value={reasonList.find((reason) => reason.value === value)}
+                        placeholder={t("ooo_select_reason")}
+                        options={reasonList}
+                        onChange={(selectedOption) => {
+                          if (selectedOption?.value) {
+                            onChange(selectedOption.value);
+                          }
+                        }}
+                      />
+                      {isAnalyzingNotes && (
+                        <p className="text-xs text-gray-500">{t("ai_analyzing_notes")}</p>
+                      )}
+                    </div>
                   )}
                 />
               </div>
